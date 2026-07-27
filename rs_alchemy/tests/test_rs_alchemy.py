@@ -3,6 +3,7 @@
     python -m pytest rs_alchemy/tests -q
 """
 
+import json
 import os
 import sys
 
@@ -211,3 +212,60 @@ def test_cli_end_to_end_against_a_fake_api(tmp_path, monkeypatch):
     assert cli.main(['--out', out_year, '--days', '30', '--cache-dir', str(tmp_path / 'c2')]) == 0
     trimmed = store.read_hdf5(out_year)['history']
     assert trimmed['timestamp'].max() - trimmed['timestamp'].min() <= pd.Timedelta(days=30)
+
+
+def test_export_site_data_bundle(tmp_path):
+    """The JSON the static site reads: manifest, tables, per-item series."""
+    from rs_alchemy import export
+
+    items, prices = _fixture_frames()
+    alch = alchemy.build_alchemy_table(prices, items)
+    out = tmp_path / 'data'
+
+    manifest = export.export_site_data(
+        str(out),
+        latest=alchemy.latest_snapshot(alch),
+        summaries=alchemy.summarize_windows(alch),
+        history=prices,
+        max_series_points=100,
+        sample=True,
+    )
+
+    assert manifest['sample'] is True
+    assert manifest['n_items'] == 2
+    assert set(manifest['windows']) == set(alchemy.WINDOWS)
+    assert sorted(manifest['series_ids']) == [561, 1127]
+
+    latest = json.loads((out / 'latest.json').read_text())
+    assert latest['columns'][:2] == ['item_id', 'name']
+    assert len(latest['rows']) == 2
+    assert all(len(row) == len(latest['columns']) for row in latest['rows'])
+
+    summary = json.loads((out / 'summary_last_1w.json').read_text())
+    assert summary['columns'][0] == 'item_id'
+
+    series = json.loads((out / 'series' / '1127.json').read_text())
+    assert len(series['t']) == len(series['p']) == len(series['v']) <= 100
+    assert series['t'] == sorted(series['t'])
+
+
+def test_export_json_is_free_of_nan_and_numpy(tmp_path):
+    """NaN is not valid JSON -- everything missing must land as null."""
+    from rs_alchemy import export
+
+    frame = pd.DataFrame(
+        {
+            'item_id': [1, 2],
+            'name': ['a', 'b'],
+            'price': [1.5, float('nan')],
+            'members': [True, False],
+            'timestamp': pd.to_datetime(['2024-01-01', '2024-01-02']),
+        }
+    )
+    payload = export.frame_to_columnar(frame)
+    text = json.dumps(payload)
+
+    assert 'NaN' not in text
+    assert payload['rows'][1][2] is None
+    assert payload['rows'][0][4] == '2024-01-01'
+    assert json.loads(text) == payload

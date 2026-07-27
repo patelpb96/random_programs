@@ -16,7 +16,7 @@ import sys
 
 import pandas as pd
 
-from . import alchemy, api, discover, history, items as items_module, store
+from . import alchemy, api, discover, export, history, items as items_module, store
 
 
 def build_parser():
@@ -61,6 +61,21 @@ def build_parser():
         '--nature-price',
         type=float,
         help='flat nature rune price; default is the rune\'s own daily history',
+    )
+    parser.add_argument(
+        '--export-dir',
+        help='also write the JSON bundle the docs/ site reads (e.g. docs/data)',
+    )
+    parser.add_argument(
+        '--no-series',
+        action='store_true',
+        help='skip the per-item series files when exporting (much smaller, no charts)',
+    )
+    parser.add_argument(
+        '--max-series-points',
+        type=int,
+        default=1500,
+        help='thin each exported series to at most this many points',
     )
     parser.add_argument(
         '--discover',
@@ -150,6 +165,23 @@ def main(argv=None):
             'last_timestamp': str(prices['timestamp'].max()),
         },
     )
+
+    if args.export_dir:
+        manifest = export.export_site_data(
+            args.export_dir,
+            latest=latest,
+            summaries=summaries,
+            history=prices,
+            with_series=not args.no_series,
+            max_series_points=args.max_series_points,
+            attrs={'days': args.days if args.days else 'all'},
+        )
+        total = sum(manifest['bytes'].values())
+        print(
+            f'exported {len(manifest["bytes"])} JSON tables'
+            f' ({total / 1e6:.1f} MB) to {args.export_dir}',
+            file=sys.stderr,
+        )
 
     print(f'\nwrote {args.out}', file=sys.stderr)
     print(store.describe(args.out), file=sys.stderr)

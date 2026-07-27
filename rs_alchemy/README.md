@@ -81,6 +81,34 @@ with pd.HDFStore('rs_alchemy.h5') as h:
     print(h.get_storer('items').attrs.scrape)
 ```
 
+## Feeding the web dashboard
+
+`--export-dir` writes the JSON bundle the static site reads, alongside the HDF5:
+
+```sh
+python -m rs_alchemy --export-dir ../patelpb96.github.io/public/rs-alchemy/data
+python -m rs_alchemy --export-dir <dir> --no-series      # tables only, no charts
+```
+
+| file | contents |
+| --- | --- |
+| `manifest.json` | provenance, window list, which files exist, `sample` flag |
+| `latest.json` | newest row per item |
+| `summary_<window>.json` | per-item stats for `all`, `last_1y` … `last_1d` |
+| `series/<item_id>.json` | `{t: days-since-epoch, p: price, v: volume}`, thinned to `--max-series-points` |
+
+Tables are column-oriented (`{"columns": [...], "rows": [[...]]}`) to roughly
+halve the bytes. The site lives in
+[`patelpb96.github.io/public/rs-alchemy/`](https://patelpb96.github.io/rs-alchemy/):
+sortable on multiple keys at once, numeric range filters, per-item price /
+volume / profit charts.
+
+To regenerate the synthetic dataset the site ships with (no network needed):
+
+```sh
+python -m rs_alchemy.make_sample_data --out <dir>
+```
+
 ## Library use
 
 ```python
