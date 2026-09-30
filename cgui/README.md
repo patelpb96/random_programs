@@ -19,6 +19,17 @@ cgui's window features:
 
 ![preetum main menu](docs/menu.png)
 
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Code structure: layers, how a frame is produced, coordinate spaces, widget state, the platform contract, ownership rules. |
+| [docs/DESIGN.md](docs/DESIGN.md) | Why it's built this way, the alternatives that were rejected, and when to revisit them. |
+| [docs/PITFALLS.md](docs/PITFALLS.md) | Traps and real bugs from development, the rules that prevent them, and testing recipes. |
+| [docs/PREETUM.md](docs/PREETUM.md) | The app's structure, the tool contract, services, and how to add a tool (worked non-font example). |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Platform status, known issues, and what to build next. |
+| [CLAUDE.md](CLAUDE.md) | Condensed handoff notes for picking the project back up. |
+
 The checkerboard in the screenshots shows where the frame is translucent. The window buttons:
 
 ![curved window buttons](docs/corner.png)
@@ -30,8 +41,14 @@ taskbar/dock icon. Open a tool from the menu by clicking its card or pressing it
 To get back to the menu, press **‹ Menu** or Esc.
 
 The bottom bar is on every screen and edits the window's appearance live: theme, frame
-opacity, body opacity, rounded corners with radius, and accent colour. The chosen font is
-shared between tools.
+opacity, body opacity, rounded corners with radius, and accent colour.
+
+**Font data is loaded only while a font tool is open.**
+- On the main menu, only the one UI font is read.
+- Opening Font Compare or Glyph Map shows "Loading fonts…" briefly while the installed
+  fonts are scanned.
+- Leaving frees the font list and every loaded font. The chosen font is remembered by name
+  and shared between tools.
 
 ### Font Compare
 
@@ -58,13 +75,11 @@ shared between tools.
 
 ### Adding a tool
 
-1. Write `apps/preetum/tool_<name>.c` with a frame function and an icon function for the
-   menu card.
-2. Declare both in `preetum.h`.
-3. Add an entry to the `tools` table in `main.c`, and the file to `CMakeLists.txt`. The
-   Makefile picks up new files automatically.
-
-The menu, the navigation and the number-key shortcut come for free.
+A tool is one `apps/preetum/tool_<name>.c` file (a frame function and a menu-card icon) plus
+one row in the `tools` table in `main.c`. The row also lists the shared *services* the tool
+needs, such as fonts. The menu card, navigation, number-key shortcut and service loading
+come for free. [docs/PREETUM.md](docs/PREETUM.md) walks through a complete example that has
+nothing to do with fonts (a stopwatch), and explains how to add a new service.
 
 ## Building
 
@@ -162,8 +177,11 @@ src/platform.h        the interface every backend implements
 src/platform_x11.c    Linux/BSD
 src/platform_win32.c  Windows
 src/platform_cocoa.m  macOS
-apps/preetum/         the preetum app (menu, logo, tools)
+apps/preetum/         the preetum app (menu, logo, services, tools)
+tests/                CTest programs (cmake ... && ctest)
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full picture.
 
 - **Rendering.** Every frame is rasterized in software into a premultiplied ARGB buffer.
   Shapes are anti-aliased with signed distance functions. The window outline is a rounded
@@ -184,6 +202,9 @@ apps/preetum/         the preetum app (menu, logo, tools)
 - **Fonts.** cgui walks the platform's font directories and reads each face's family and
   style names with FreeType. It uses the same code path on every OS, and every font it lists
   is guaranteed to load. Named instances of variable fonts are listed as separate styles.
+  - **Scanning is on demand.** It only happens when `cg_fontdb_scan()` is called, and
+    `cg_fontdb_release()` drops the list again.
+  - **Opening a window doesn't scan.** The UI font is found at a well-known path per OS.
 - **Event loop.** It sleeps until input arrives. The only timer is the caret blink, so an
   idle window uses no CPU.
 - **HiDPI.** All API coordinates are logical pixels. The DPI scale comes from `Xft.dpi` on
@@ -200,6 +221,8 @@ Environment variables:
 | `PREETUM_TOOL=n` | Start preetum in tool `n` (1-based) instead of the menu. |
 
 ## Status and limitations
+
+The live list is [docs/ROADMAP.md](docs/ROADMAP.md). In short:
 
 - **X11:** tested under Xvfb with no window manager, and with Openbox plus the xcompmgr
   compositor. That covered typing, selection, clipboard, undo/redo, dropdowns, theme and
