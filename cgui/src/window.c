@@ -146,9 +146,11 @@ static chrome_geo geometry(cg_window *w)
     g.cy = g.T;
     g.arc_r = g.T * 0.68f;
     g.btn_r = g.T * 0.15f;
-    g.angle[0] = 78.f;
-    g.angle[1] = 45.f;
-    g.angle[2] = 12.f;
+    /* Rotated a little counter-clockwise from symmetric (78/45/12) so the
+     * close button clears the line between the title bar and the body. */
+    g.angle[0] = 86.f;
+    g.angle[1] = 53.f;
+    g.angle[2] = 20.f;
     bool round = s->rounded && !w->maximized;
     float r = round ? s->corner_radius : 0.f;
     g.radii[0] = r;
@@ -300,9 +302,12 @@ void chrome_draw(cg_window *w)
         cg_pop_clip(w);
     }
 
-    /* Curved track behind the buttons, concentric with the corner. */
+    /* Curved track behind the buttons, concentric with the corner, kept
+     * inside the title bar so it ends flush with the separator. */
+    canvas_set_clip(cv, 0, 0, cv->w, (int)(T - fmaxf(1.f, s)));
     canvas_arc(cv, g.cx * s, g.cy * s, g.arc_r * s, g.angle[2] - 7.f, g.angle[0] + 7.f,
                (g.btn_r + g.T * 0.07f) * s, pm_from(th->button_track, fmaxf(frame_op, 0.5f)));
+    canvas_set_clip(cv, 0, 0, cv->w, cv->h);
 
     /* The buttons themselves. */
     static const char *ids[3] = { "cg.minimize", "cg.maximize", "cg.close" };
