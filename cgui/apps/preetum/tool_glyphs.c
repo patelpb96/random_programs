@@ -69,7 +69,15 @@ void glyphs_init(preetum *a)
     a->cps_family = a->cps_style = -2;
 }
 
-void glyphs_free(preetum *a) { free(a->cps); }
+/* Leaving the tool: drop the codepoint table (it is rebuilt on return). */
+void glyphs_leave(preetum *a)
+{
+    free(a->cps);
+    a->cps = NULL;
+    a->ncps = 0;
+    a->cps_family = a->cps_style = -2;
+    a->glyph_scroll = 0;
+}
 
 void glyphs_icon(cg_window *win, cg_rect r, preetum *a)
 {
@@ -167,6 +175,7 @@ static void inspector(cg_window *win, cg_rect r, preetum *a)
 void glyphs_frame(cg_window *win, cg_rect r, preetum *a)
 {
     const cg_theme *th = &cg_window_style(win)->theme;
+    if (!fonts_ready(win, r, a)) return;
     refresh_codepoints(a);
 
     cg_rect head = cg_cut_top(&r, 30);

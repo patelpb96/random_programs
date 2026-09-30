@@ -240,7 +240,16 @@ typedef struct cg_font_family {
     int regular;  /* index into faces of the most "regular" style */
 } cg_font_family;
 
+/* Scanning reads every font file's header, which can take a noticeable
+ * fraction of a second on systems with thousands of fonts, so call it only
+ * when something actually needs the list. Creating a window does not scan
+ * (the UI font is found at a well-known path when possible). */
 int cg_fontdb_scan(void);  /* returns the family count; cached after first call */
+/* Frees the database. Every cg_font_family / cg_font_face pointer and index
+ * obtained before becomes invalid; cg_fontdb_scan() rebuilds it. Loaded
+ * cg_font objects are independent and stay valid. */
+void cg_fontdb_release(void);
+bool cg_fontdb_loaded(void);
 int cg_fontdb_family_count(void);
 const cg_font_family *cg_fontdb_family(int index);
 int cg_fontdb_find(const char *family_name); /* case-insensitive, -1 if missing */

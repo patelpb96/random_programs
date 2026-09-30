@@ -64,7 +64,8 @@ void compare_frame(cg_window *win, cg_rect r, preetum *a)
         a->synced_version = a->input.version;
     }
 
-    /* Right: font picker + preview. */
+    /* Right: font picker + preview. The editor above works while fonts load. */
+    if (!fonts_ready(win, right, a)) return;
     cg_rect rhead = cg_cut_top(&right, 30);
     cg_cut_top(&right, 8);
     cg_spinbox(win, cg_id_str("out.size"), cg_cut_right(&rhead, 110), &a->out_size, 6, 200, 1, "%.0f px");

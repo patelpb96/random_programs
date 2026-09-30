@@ -221,6 +221,19 @@ int cg_fontdb_scan(void)
     return g_nfams;
 }
 
+void cg_fontdb_release(void)
+{
+    for (int i = 0; i < g_nfaces; i++) free_face(&g_faces[i]);
+    free(g_faces);
+    free(g_fams);
+    g_faces = NULL;
+    g_fams = NULL;
+    g_nfaces = g_capfaces = g_nfams = 0;
+    g_scanned = false;
+}
+
+bool cg_fontdb_loaded(void) { return g_scanned; }
+
 int cg_fontdb_family_count(void) { return g_nfams; }
 
 const cg_font_family *cg_fontdb_family(int index)
@@ -240,6 +253,56 @@ int cg_fontdb_find(const char *name)
     return -1;
 }
 
+static bool file_exists(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (f) fclose(f);
+    return f != NULL;
+}
+
+/* Well-known locations of a good UI font, checked before resorting to a full
+ * scan, so opening a window never has to enumerate every installed font. */
+static const char *known_ui_font(void)
+{
+#if defined(_WIN32)
+    static char buf[MAX_PATH + 32];
+    static const char *names[] = { "segoeui.ttf", "arial.ttf", "tahoma.ttf", "verdana.ttf" };
+    char windir[MAX_PATH];
+    UINT n = GetWindowsDirectoryA(windir, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return NULL;
+    for (size_t i = 0; i < sizeof names / sizeof *names; i++) {
+        snprintf(buf, sizeof buf, "%s\\Fonts\\%s", windir, names[i]);
+        if (file_exists(buf)) return buf;
+    }
+    return NULL;
+#else
+    static const char *paths[] = {
+#if defined(__APPLE__)
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/HelveticaNeue.ttc",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/Library/Fonts/Arial.ttf",
+#else
+        /* Debian/Ubuntu, Fedora (old and new), Arch, openSUSE layouts. */
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+#endif
+    };
+    for (size_t i = 0; i < sizeof paths / sizeof *paths; i++)
+        if (file_exists(paths[i])) return paths[i];
+    return NULL;
+#endif
+}
+
 const char *fontdb_default_ui_font_path(int *index)
 {
     const char *env = getenv("CGUI_FONT");
@@ -247,6 +310,12 @@ const char *fontdb_default_ui_font_path(int *index)
         *index = 0;
         return env;
     }
+    const char *known = known_ui_font();
+    if (known) {
+        *index = 0;
+        return known;
+    }
+    /* Unusual system: fall back to enumerating everything. */
     cg_fontdb_scan();
     static const char *prefs[] = {
         "Segoe UI", "SF Pro Text", "Helvetica Neue", "Inter", "Noto Sans", "DejaVu Sans",

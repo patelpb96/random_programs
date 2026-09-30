@@ -9,11 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The tool registry. Order = menu order = number-key shortcut. */
 static const tool tools[] = {
     { "Font Compare", { "Type on one side, see it in any", "installed font on the other." },
-      compare_icon, compare_frame },
+      NEEDS_FONTS, NULL, NULL, compare_icon, compare_frame },
     { "Glyph Map", { "Browse every glyph in a font,", "inspect it, and copy it." },
-      glyphs_icon, glyphs_frame },
+      NEEDS_FONTS, NULL, glyphs_leave, glyphs_icon, glyphs_frame },
 };
 #define NTOOLS (int)(sizeof tools / sizeof *tools)
 
@@ -23,9 +24,20 @@ static const cg_color accents[] = {
 };
 #define NACCENTS (int)(sizeof accents / sizeof *accents)
 
+/* Switches screens, running the lifecycle: the old tool's leave hook, then
+ * the services only it needed are closed; services only the new tool needs
+ * are opened, then its enter hook runs. A screen that needs no fonts (the
+ * menu) therefore holds no font data; see docs/PREETUM.md. */
 static void set_screen(preetum *a, int screen)
 {
+    if (screen == a->screen) return;
+    unsigned had = a->screen >= 0 ? tools[a->screen].needs : 0;
+    unsigned want = screen >= 0 ? tools[screen].needs : 0;
+    if (a->screen >= 0 && tools[a->screen].leave) tools[a->screen].leave(a);
+    if ((had & ~want) & NEEDS_FONTS) fonts_close(a);
     a->screen = screen;
+    if ((want & ~had) & NEEDS_FONTS) fonts_open(a);
+    if (screen >= 0 && tools[screen].enter) tools[screen].enter(a);
     char title[128];
     if (screen < 0) snprintf(title, sizeof title, "preetum");
     else snprintf(title, sizeof title, "preetum  ·  %s", tools[screen].name);
@@ -128,7 +140,7 @@ static void menu_card(cg_window *win, cg_rect r, preetum *a, int index)
     cg_pop_clip(win);
 
     if (real) {
-        char key[4];
+        char key[16];
         snprintf(key, sizeof key, "%d", index + 1);
         cg_draw_text(win, ui, 12, r.x + r.w - 20, r.y + 10, key, -1, cg_color_alpha(th->text_dim, 0.7f));
         if (it.hover) cg_set_cursor(win, CG_CURSOR_HAND);
@@ -208,7 +220,9 @@ static void frame(cg_window *win, cg_rect content, void *user)
 
 int main(void)
 {
-    cg_fontdb_scan();
+    /* Note: no font scanning here. The menu only needs the UI font, which
+     * cg_window_create finds on its own; the fonts service loads the rest
+     * when a tool that needs it is opened. */
     static preetum a;
     a.screen = -1;
     a.accent = -1;
@@ -223,7 +237,6 @@ int main(void)
     cg_window_set_min_size(a.win, 880, 540);
     cg_window_set_icon(a.win, a.logo, LOGO_W, LOGO_H);
 
-    fonts_pick_default(&a);
     compare_init(&a);
     glyphs_init(&a);
 
@@ -233,9 +246,8 @@ int main(void)
 
     cg_run(a.win, frame, &a);
 
+    set_screen(&a, -1); /* runs the open tool's leave hook and closes services */
     compare_free(&a);
-    glyphs_free(&a);
-    fonts_free(&a);
     cg_window_destroy(a.win);
     return 0;
 }
