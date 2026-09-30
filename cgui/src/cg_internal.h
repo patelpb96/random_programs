@@ -35,6 +35,9 @@ void canvas_line(cg_canvas *cv, float x0, float y0, float x1, float y1, float t,
  * counter-clockwise with y pointing up), half-width. */
 void canvas_arc(cg_canvas *cv, float cx, float cy, float radius, float a0, float a1,
                 float half_width, pm_color c);
+/* Nearest-neighbour blit of a straight-alpha ARGB image into a rect. */
+void canvas_blit_image(cg_canvas *cv, float x, float y, float w, float h, const uint32_t *argb, int iw,
+                       int ih);
 void canvas_blit_a8(cg_canvas *cv, int x, int y, const uint8_t *a8, int w, int h, int pitch,
                     pm_color c);
 
@@ -138,6 +141,8 @@ struct cg_window {
     bool maximized;
     bool alpha_ok;          /* translucency is actually visible */
     bool debug_dump;        /* CGUI_SCREENSHOT is set */
+    uint32_t *icon;         /* title-bar icon, straight ARGB */
+    int icon_w, icon_h;
     int pending_drag;       /* -1 = none, else edge flags (0 = move) */
     int armed_drag;         /* press on title/edge waiting for movement, -1 = none */
     float armed_x, armed_y;
@@ -158,8 +163,6 @@ void ui_popup_end(cg_window *w);
 typedef struct ui_behavior { bool hover, pressed, down, released, clicked; } ui_behavior;
 ui_behavior ui_behave(cg_window *w, cg_id id, cg_rect r, bool focusable);
 void ui_text_in(cg_window *w, cg_rect r, const char *s, int align, cg_color c, float size);
-cg_color cg_color_alpha(cg_color c, float a);
-cg_color cg_color_mix(cg_color a, cg_color b, float t);
 
 /* window.c */
 void chrome_draw(cg_window *w);

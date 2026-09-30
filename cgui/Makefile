@@ -25,7 +25,9 @@ endif
 
 OBJ = $(SRC:src/%.c=build/%.o) $(PLATFORM_OBJ)
 
-all: build/fontview
+APP_SRC = $(wildcard apps/preetum/*.c)
+
+all: build/preetum
 
 build:
 	mkdir -p build
@@ -39,8 +41,8 @@ build/platform_cocoa.o: src/platform_cocoa.m src/platform.h include/cgui.h | bui
 build/libcgui.a: $(OBJ)
 	$(AR) rcs $@ $^
 
-build/fontview: examples/fontview.c build/libcgui.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< build/libcgui.a $(LDLIBS) -o $@
+build/preetum: $(APP_SRC) apps/preetum/preetum.h build/libcgui.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(APP_SRC) build/libcgui.a $(LDLIBS) -o $@
 
 clean:
 	rm -rf build

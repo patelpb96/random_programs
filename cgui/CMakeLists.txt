@@ -43,9 +43,15 @@ if(NOT MSVC)
     target_compile_options(cgui PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
 
-add_executable(fontview WIN32 examples/fontview.c)
-target_link_libraries(fontview PRIVATE cgui)
+add_executable(preetum WIN32
+    apps/preetum/main.c
+    apps/preetum/logo.c
+    apps/preetum/fonts.c
+    apps/preetum/tool_compare.c
+    apps/preetum/tool_glyphs.c
+)
+target_link_libraries(preetum PRIVATE cgui)
 if(MSVC)
     # Keep a plain main() while using the GUI subsystem (no console window).
-    target_link_options(fontview PRIVATE /ENTRY:mainCRTStartup)
+    target_link_options(preetum PRIVATE /ENTRY:mainCRTStartup)
 endif()

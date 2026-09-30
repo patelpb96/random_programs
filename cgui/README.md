@@ -1,6 +1,9 @@
-# cgui
+# cgui and preetum
 
-A small cross-platform GUI toolkit in C with a fully custom-drawn window:
+**cgui** is a small cross-platform GUI toolkit in C with a fully custom-drawn window.
+**preetum** is the app built on it: a main menu of small tools that will keep growing.
+
+cgui's window features:
 
 - **Custom frame and title bar.** No OS decorations; everything is drawn by cgui.
 - **Window buttons on the curve.** Minimize, maximize and close sit along the arc of the
@@ -14,13 +17,25 @@ A small cross-platform GUI toolkit in C with a fully custom-drawn window:
 - **Rounded corners option.** Toggle rounded corners and set their radius. Maximized windows
   switch to square corners automatically.
 
-![fontview](docs/fontview.png)
+![preetum main menu](docs/menu.png)
 
-The checkerboard in the screenshot shows where the frame is translucent. The window buttons:
+The checkerboard in the screenshots shows where the frame is translucent. The window buttons:
 
 ![curved window buttons](docs/corner.png)
 
-## The test program: `fontview`
+## preetum
+
+The pixel-art diamond logo appears in the title bar, on the main menu, and as the
+taskbar/dock icon. Open a tool from the menu by clicking its card or pressing its number.
+To get back to the menu, press **‹ Menu** or Esc.
+
+The bottom bar is on every screen and edits the window's appearance live: theme, frame
+opacity, body opacity, rounded corners with radius, and accent colour. The chosen font is
+shared between tools.
+
+### Font Compare
+
+![Font Compare](docs/font-compare.png)
 
 - **Left half:** a multi-line text editor. It has word wrap, selection, a clipboard,
   undo/redo, and word-wise navigation.
@@ -28,8 +43,28 @@ The checkerboard in the screenshot shows where the frame is translucent. The win
   a dropdown that you can filter by typing, and that previews each font in its own typeface.
   A second dropdown picks the style (Bold, Italic, the named instances of variable fonts, ...).
 - **Separate size controls** on each side.
-- **Bottom bar:** edits the window's appearance live. It has theme, frame opacity, body
-  opacity, rounded corners with radius, and accent colour.
+
+### Glyph Map
+
+![Glyph Map](docs/glyph-map.png)
+
+- **Grid:** every visible character in the selected font, with its code point under it.
+  The cell size is adjustable. Scroll with the wheel or the scrollbar. Select a glyph by
+  clicking it or with the arrow keys, Page Up/Down, Home and End.
+- **Inspector:** the selected glyph drawn large, with ascender, baseline, descender and
+  advance-width guides. It also shows the glyph's U+ code, decimal value, UTF-8 bytes and
+  HTML entity.
+- **Copy buttons:** copy the glyph itself or its U+ code.
+
+### Adding a tool
+
+1. Write `apps/preetum/tool_<name>.c` with a frame function and an icon function for the
+   menu card.
+2. Declare both in `preetum.h`.
+3. Add an entry to the `tools` table in `main.c`, and the file to `CMakeLists.txt`. The
+   Makefile picks up new files automatically.
+
+The menu, the navigation and the number-key shortcut come for free.
 
 ## Building
 
@@ -42,7 +77,7 @@ Xext for the rounded outline when no compositor is running.
 sudo apt install build-essential libfreetype-dev libx11-dev libxext-dev   # Debian/Ubuntu
 cd cgui
 make
-./build/fontview
+./build/preetum
 ```
 
 Or with CMake: `cmake -S . -B build && cmake --build build`.
@@ -53,7 +88,7 @@ Or with CMake: `cmake -S . -B build && cmake --build build`.
 brew install freetype pkg-config
 cd cgui
 make            # or: cmake -S . -B build && cmake --build build
-./build/fontview
+./build/preetum
 ```
 
 ### Windows
@@ -63,6 +98,7 @@ With MSYS2/MinGW:
 ```sh
 pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-freetype
 cmake -S . -B build -G "MinGW Makefiles" && cmake --build build
+./build/preetum.exe
 ```
 
 With Visual Studio, get FreeType from vcpkg (`vcpkg install freetype`) and configure with
@@ -101,9 +137,15 @@ int main(void)
 ```
 
 Widgets: label, button, checkbox, slider, spin box, colour swatch, dropdown (with an optional
-filter field and per-row font previews), and the multi-line text editor. There are also
-drawing primitives: anti-aliased rects, rounded rects, circles, lines and text. For layout,
-cut rectangles with `cg_cut_left/right/top/bottom`.
+filter field and per-row font previews), scrollbar, and the multi-line text editor.
+
+- **Drawing:** anti-aliased rects, rounded rects, circles, lines, text, and nearest-neighbour
+  images.
+- **Layout:** cut rectangles with `cg_cut_left/right/top/bottom`.
+- **Custom widgets:** `cg_interact` (hover/press/click tracking), `cg_wheel`, `cg_set_cursor`
+  and `cg_focused` cover what you need.
+- **Window icon:** `cg_window_set_icon` sets it from straight-alpha ARGB pixels.
+- **Font coverage:** `cg_font_codepoints` lists the characters a font covers.
 
 ## How it works
 
@@ -120,7 +162,7 @@ src/platform.h        the interface every backend implements
 src/platform_x11.c    Linux/BSD
 src/platform_win32.c  Windows
 src/platform_cocoa.m  macOS
-examples/fontview.c   the test program
+apps/preetum/         the preetum app (menu, logo, tools)
 ```
 
 - **Rendering.** Every frame is rasterized in software into a premultiplied ARGB buffer.
@@ -155,6 +197,7 @@ Environment variables:
 | `CGUI_SCALE` | Force a UI scale factor. |
 | `CGUI_FONT` | Path of the font file to use for the UI. |
 | `CGUI_SCREENSHOT=out.ppm` | Render a couple of frames, write the image composited over a checkerboard, and exit. |
+| `PREETUM_TOOL=n` | Start preetum in tool `n` (1-based) instead of the menu. |
 
 ## Status and limitations
 
@@ -162,7 +205,7 @@ Environment variables:
   compositor. That covered typing, selection, clipboard, undo/redo, dropdowns, theme and
   opacity changes, move and resize (edges, corners and the curved top-right corner),
   maximize and restore (button and double-click), minimize and close.
-- **Windows:** cross-compiled with MinGW and run under Wine. Rendering, typing, clipboard,
+- **Windows:** cross-compiled with MinGW and run under Wine. Rendering, the window icon, typing, clipboard,
   native move and resize, maximize and close work there. Under Wine the maximized size snaps
   back to the restored size right away. That comes from Wine's X11 driver (it sends the
   resize itself), and it has not yet been checked on real Windows.

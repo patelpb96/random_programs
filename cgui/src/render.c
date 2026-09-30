@@ -322,6 +322,27 @@ void canvas_arc(cg_canvas *cv, float cx, float cy, float radius, float a0, float
     }
 }
 
+void canvas_blit_image(cg_canvas *cv, float x, float y, float w, float h, const uint32_t *argb, int iw,
+                       int ih)
+{
+    int x0 = (int)floorf(x + 0.5f), y0 = (int)floorf(y + 0.5f);
+    int x1 = (int)floorf(x + w + 0.5f), y1 = (int)floorf(y + h + 0.5f);
+    if (x1 <= x0 || y1 <= y0 || iw <= 0 || ih <= 0) return;
+    int cx0 = cg_maxi(x0, cv->cx0), cy0 = cg_maxi(y0, cv->cy0);
+    int cx1 = cg_mini(x1, cv->cx1), cy1 = cg_mini(y1, cv->cy1);
+    for (int j = cy0; j < cy1; j++) {
+        int sy = (int)((j - y0 + 0.5f) * ih / (float)(y1 - y0));
+        const uint32_t *src = argb + (size_t)cg_mini(sy, ih - 1) * iw;
+        uint32_t *row = cv->px + (size_t)j * cv->w;
+        for (int i = cx0; i < cx1; i++) {
+            uint32_t p = src[cg_mini((int)((i - x0 + 0.5f) * iw / (float)(x1 - x0)), iw - 1)];
+            if (!(p >> 24)) continue;
+            cg_color c = { (uint8_t)(p >> 16), (uint8_t)(p >> 8), (uint8_t)p, (uint8_t)(p >> 24) };
+            blend(&row[i], pm_from(c, 1.f), 255);
+        }
+    }
+}
+
 void canvas_blit_a8(cg_canvas *cv, int x, int y, const uint8_t *a8, int w, int h, int pitch,
                     pm_color c)
 {

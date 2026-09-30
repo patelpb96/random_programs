@@ -140,6 +140,24 @@ void cg_font_free(cg_font *f)
 
 const char *cg_font_path(const cg_font *f) { return f ? f->path : NULL; }
 
+int cg_font_codepoints(cg_font *f, uint32_t *out, int max)
+{
+    if (!f) return 0;
+    int n = 0;
+    FT_UInt gi;
+    FT_ULong c = FT_Get_First_Char(f->face, &gi);
+    while (gi != 0) {
+        uint32_t cp = (uint32_t)c;
+        /* Symbol fonts map their glyphs at U+F0xx; char_index() folds
+         * U+00xx onto those, so report the plain codepoint. */
+        if (f->symbol && cp >= 0xF000 && cp < 0xF100) cp -= 0xF000;
+        if (out && n < max) out[n] = cp;
+        n++;
+        c = FT_Get_Next_Char(f->face, c, &gi);
+    }
+    return n;
+}
+
 static void set_size(cg_font *f, int32_t size26)
 {
     if (f->cur_size26 != size26) {

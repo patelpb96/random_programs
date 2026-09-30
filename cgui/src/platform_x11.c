@@ -36,14 +36,14 @@ enum {
     A_WM_PROTOCOLS, A_WM_DELETE_WINDOW, A_NET_WM_NAME, A_UTF8_STRING, A_MOTIF_WM_HINTS,
     A_NET_WM_MOVERESIZE, A_NET_WM_STATE, A_NET_WM_STATE_MAX_V, A_NET_WM_STATE_MAX_H,
     A_NET_WM_STATE_HIDDEN, A_NET_SUPPORTED, A_CLIPBOARD, A_TARGETS, A_CGUI_CLIP,
-    A_NET_WM_WINDOW_TYPE, A_NET_WM_WINDOW_TYPE_NORMAL, A_COUNT
+    A_NET_WM_WINDOW_TYPE, A_NET_WM_WINDOW_TYPE_NORMAL, A_NET_WM_ICON, A_COUNT
 };
 
 static const char *atom_names[A_COUNT] = {
     "WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_WM_NAME", "UTF8_STRING", "_MOTIF_WM_HINTS",
     "_NET_WM_MOVERESIZE", "_NET_WM_STATE", "_NET_WM_STATE_MAXIMIZED_VERT",
     "_NET_WM_STATE_MAXIMIZED_HORZ", "_NET_WM_STATE_HIDDEN", "_NET_SUPPORTED", "CLIPBOARD",
-    "TARGETS", "CGUI_CLIP", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
+    "TARGETS", "CGUI_CLIP", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL", "_NET_WM_ICON",
 };
 
 typedef struct manual_drag {
@@ -269,6 +269,33 @@ void plat_window_set_min_size(plat_window *pw, int w, int h)
     pw->min_w = w;
     pw->min_h = h;
     set_min_hints(pw);
+}
+
+void plat_window_set_icon(plat_window *pw, const uint32_t *argb, int w, int h)
+{
+    /* _NET_WM_ICON holds several sizes; add nearest-neighbour upscales so
+     * small pixel-art icons stay sharp in docks and task switchers. */
+    static const int targets[] = { 16, 32, 48, 64, 128 };
+    size_t total = 0;
+    for (size_t t = 0; t < sizeof targets / sizeof *targets; t++) total += 2 + (size_t)targets[t] * targets[t];
+    unsigned long *data = (unsigned long *)malloc(sizeof(unsigned long) * total);
+    size_t k = 0;
+    for (size_t t = 0; t < sizeof targets / sizeof *targets; t++) {
+        int s = targets[t];
+        data[k++] = (unsigned long)s;
+        data[k++] = (unsigned long)s;
+        int side = w > h ? w : h;
+        int ox = (side - w) / 2, oy = (side - h) / 2;
+        for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++) {
+                int sx = x * side / s - ox, sy = y * side / s - oy;
+                data[k++] = sx >= 0 && sy >= 0 && sx < w && sy < h ? argb[sy * w + sx] : 0;
+            }
+    }
+    XChangeProperty(dpy, pw->win, atoms[A_NET_WM_ICON], XA_CARDINAL, 32, PropModeReplace,
+                    (unsigned char *)data, (int)total);
+    XFlush(dpy);
+    free(data);
 }
 
 void plat_window_size(plat_window *pw, int *w, int *h)

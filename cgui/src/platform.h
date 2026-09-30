@@ -61,6 +61,8 @@ plat_window *plat_window_create(const char *title, int w, int h);
 void plat_window_destroy(plat_window *pw);
 void plat_window_set_title(plat_window *pw, const char *title);
 void plat_window_set_min_size(plat_window *pw, int w, int h);
+/* Straight-alpha 0xAARRGGBB icon for the taskbar / dock / window list. */
+void plat_window_set_icon(plat_window *pw, const uint32_t *argb, int w, int h);
 void plat_window_size(plat_window *pw, int *w, int *h);
 float plat_window_scale(plat_window *pw);
 /* True when translucent pixels really show what is behind the window

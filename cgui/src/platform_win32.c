@@ -50,6 +50,7 @@ struct plat_window {
     void (*refresh)(void *);
     void *refresh_ctx;
     bool in_sizemove, tracking_leave;
+    HICON icon_big, icon_small;
     int cursor;
     WCHAR high_surrogate;
 };
@@ -433,6 +434,8 @@ void plat_window_destroy(plat_window *pw)
     }
     DeleteDC(pw->memdc);
     DestroyWindow(pw->hwnd);
+    if (pw->icon_big) DestroyIcon(pw->icon_big);
+    if (pw->icon_small) DestroyIcon(pw->icon_small);
     free(pw);
 }
 
@@ -447,6 +450,56 @@ void plat_window_set_min_size(plat_window *pw, int w, int h)
 {
     pw->min_w = w;
     pw->min_h = h;
+}
+
+static HICON make_icon(const uint32_t *argb, int w, int h, int size)
+{
+    BITMAPV5HEADER bi;
+    memset(&bi, 0, sizeof bi);
+    bi.bV5Size = sizeof bi;
+    bi.bV5Width = size;
+    bi.bV5Height = -size;
+    bi.bV5Planes = 1;
+    bi.bV5BitCount = 32;
+    bi.bV5Compression = BI_BITFIELDS;
+    bi.bV5RedMask = 0x00FF0000;
+    bi.bV5GreenMask = 0x0000FF00;
+    bi.bV5BlueMask = 0x000000FF;
+    bi.bV5AlphaMask = 0xFF000000;
+    void *bits = NULL;
+    HDC dc = GetDC(NULL);
+    HBITMAP color = CreateDIBSection(dc, (BITMAPINFO *)&bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    ReleaseDC(NULL, dc);
+    if (!color) return NULL;
+    uint32_t *px = (uint32_t *)bits;
+    int side = w > h ? w : h, ox = (side - w) / 2, oy = (side - h) / 2;
+    for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++) {
+            int sx = x * side / size - ox, sy = y * side / size - oy;
+            px[y * size + x] = sx >= 0 && sy >= 0 && sx < w && sy < h ? argb[sy * w + sx] : 0;
+        }
+    HBITMAP mask = CreateBitmap(size, size, 1, 1, NULL);
+    ICONINFO ii;
+    memset(&ii, 0, sizeof ii);
+    ii.fIcon = TRUE;
+    ii.hbmMask = mask;
+    ii.hbmColor = color;
+    HICON icon = CreateIconIndirect(&ii);
+    DeleteObject(mask);
+    DeleteObject(color);
+    return icon;
+}
+
+void plat_window_set_icon(plat_window *pw, const uint32_t *argb, int w, int h)
+{
+    HICON big = make_icon(argb, w, h, GetSystemMetrics(SM_CXICON));
+    HICON small = make_icon(argb, w, h, GetSystemMetrics(SM_CXSMICON));
+    SendMessageW(pw->hwnd, WM_SETICON, ICON_BIG, (LPARAM)big);
+    SendMessageW(pw->hwnd, WM_SETICON, ICON_SMALL, (LPARAM)small);
+    if (pw->icon_big) DestroyIcon(pw->icon_big);
+    if (pw->icon_small) DestroyIcon(pw->icon_small);
+    pw->icon_big = big;
+    pw->icon_small = small;
 }
 
 void plat_window_size(plat_window *pw, int *w, int *h)

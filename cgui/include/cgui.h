@@ -39,6 +39,10 @@ static inline cg_color cg_rgba(int r, int g, int b, int a)
     return c;
 }
 static inline cg_color cg_rgb(int r, int g, int b) { return cg_rgba(r, g, b, 255); }
+/* Multiply a colour's alpha by `a`; mix two colours (t = 0 gives `a`). */
+cg_color cg_color_alpha(cg_color c, float a);
+cg_color cg_color_mix(cg_color a, cg_color b, float t);
+
 static inline cg_rect cg_rect_make(float x, float y, float w, float h)
 {
     cg_rect r = { x, y, w, h };
@@ -105,6 +109,11 @@ cg_style *cg_window_style(cg_window *win);   /* edit freely, applies next frame 
 float cg_window_scale(cg_window *win);
 bool cg_window_maximized(cg_window *win);
 void cg_window_size(cg_window *win, float *w, float *h);
+/* Window icon as straight (non-premultiplied) 0xAARRGGBB pixels, row-major.
+ * It is drawn at the left of the title bar with nearest-neighbour scaling
+ * (so pixel art stays crisp) and handed to the OS for the taskbar / dock.
+ * The pixels are copied. */
+void cg_window_set_icon(cg_window *win, const uint32_t *argb, int w, int h);
 
 int cg_run(cg_window *win, cg_frame_fn frame, void *user);
 void cg_quit(cg_window *win);
@@ -160,6 +169,25 @@ bool cg_mouse_released(cg_window *win, int button);
 bool cg_mouse_in(cg_window *win, cg_rect r); /* false when covered by a popup */
 bool cg_key_pressed(cg_window *win, int key, int mods); /* exact modifier match */
 
+/* Building blocks for custom widgets: hover/press/click tracking for a
+ * rectangle, and the mouse cursor to show this frame. */
+typedef struct cg_interaction { bool hover, pressed, down, clicked; } cg_interaction;
+cg_interaction cg_interact(cg_window *win, cg_id id, cg_rect r);
+/* Vertical wheel movement (in notches, + = up) while the mouse is over `r`;
+ * the movement is consumed so enclosing areas don't scroll too. */
+float cg_wheel(cg_window *win, cg_rect r);
+/* Widget holding keyboard focus (a text editor, an open dropdown), or 0. */
+cg_id cg_focused(cg_window *win);
+
+enum {
+    CG_CURSOR_ARROW,
+    CG_CURSOR_IBEAM,
+    CG_CURSOR_HAND,
+    CG_CURSOR_RESIZE_EW,
+    CG_CURSOR_RESIZE_NS,
+};
+void cg_set_cursor(cg_window *win, int cursor);
+
 /* ------------------------------------------------------------------ */
 /* Drawing (logical coordinates)                                       */
 /* ------------------------------------------------------------------ */
@@ -170,6 +198,8 @@ void cg_stroke_rrect(cg_window *win, cg_rect r, float radius, float thickness, c
 void cg_fill_circle(cg_window *win, float cx, float cy, float radius, cg_color c);
 void cg_stroke_circle(cg_window *win, float cx, float cy, float radius, float thickness, cg_color c);
 void cg_line(cg_window *win, float x0, float y0, float x1, float y1, float thickness, cg_color c);
+/* Straight 0xAARRGGBB image scaled into `r` with nearest-neighbour sampling. */
+void cg_draw_image(cg_window *win, cg_rect r, const uint32_t *argb, int w, int h);
 void cg_push_clip(cg_window *win, cg_rect r); /* intersects with the current clip */
 void cg_pop_clip(cg_window *win);
 
@@ -181,6 +211,9 @@ cg_font *cg_font_load(const char *path, int face_index);
 void cg_font_free(cg_font *font);
 cg_font *cg_ui_font(cg_window *win);
 const char *cg_font_path(const cg_font *font);
+/* Unicode codepoints the font has glyphs for, ascending. With out == NULL
+ * it only counts them. Returns the total count. */
+int cg_font_codepoints(cg_font *font, uint32_t *out, int max);
 
 /* `n` < 0 means NUL-terminated. `y` is the top of the line box.
  * Returns the x coordinate where the text ends. */
@@ -240,6 +273,10 @@ bool cg_slider(cg_window *win, cg_id id, cg_rect r, float *value, float min, flo
 bool cg_spinbox(cg_window *win, cg_id id, cg_rect r, float *value,
                 float min, float max, float step, const char *fmt);
 bool cg_swatch(cg_window *win, cg_id id, cg_rect r, cg_color c, bool selected);
+/* Vertical scrollbar for a view of height `view` over `content`. Handles
+ * dragging the thumb and clicking the track; returns true when *scroll
+ * changed. Draws nothing when everything fits. */
+bool cg_scrollbar(cg_window *win, cg_id id, cg_rect track, float *scroll, float content, float view);
 
 /* Items for dropdowns are pulled through callbacks, so large lists (like
  * every font on the system) need no copying. `preview_font` is optional:

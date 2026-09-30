@@ -161,6 +161,12 @@ void cg_line(cg_window *w, float x0, float y0, float x1, float y1, float t, cg_c
     canvas_line(&w->cv, x0 * s, y0 * s, x1 * s, y1 * s, t * s, pm_from(c, 1.f));
 }
 
+void cg_draw_image(cg_window *w, cg_rect r, const uint32_t *argb, int iw, int ih)
+{
+    float s = w->scale;
+    canvas_blit_image(&w->cv, r.x * s, r.y * s, r.w * s, r.h * s, argb, iw, ih);
+}
+
 void ui_text_in(cg_window *w, cg_rect r, const char *s, int align, cg_color c, float size)
 {
     if (!s || !w->ui_font) return;
@@ -234,6 +240,28 @@ ui_behavior ui_behave(cg_window *w, cg_id id, cg_rect r, bool focusable)
         }
     }
     return b;
+}
+
+cg_interaction cg_interact(cg_window *w, cg_id id, cg_rect r)
+{
+    ui_behavior b = ui_behave(w, id, r, false);
+    cg_interaction out = { b.hover, b.pressed, b.down, b.clicked };
+    return out;
+}
+
+float cg_wheel(cg_window *w, cg_rect r)
+{
+    if (w->in.wheel_y == 0 || !ui_hover(w, r)) return 0;
+    float d = w->in.wheel_y;
+    w->in.wheel_y = 0;
+    return d;
+}
+
+cg_id cg_focused(cg_window *w) { return w->focus; }
+
+void cg_set_cursor(cg_window *w, int cursor)
+{
+    if (cursor >= 0 && cursor < CURSOR_COUNT) w->cursor = cursor;
 }
 
 void ui_begin_frame(cg_window *w)
@@ -340,6 +368,33 @@ bool cg_swatch(cg_window *w, cg_id id, cg_rect r, cg_color c, bool selected)
     cg_fill_circle(w, cx, cy, rad - (selected ? 2 : 1), c);
     if (b.hover) w->cursor = CURSOR_HAND;
     return b.clicked;
+}
+
+bool cg_scrollbar(cg_window *w, cg_id id, cg_rect track, float *scroll, float content, float view)
+{
+    float old = *scroll;
+    float max_scroll = fmaxf(0, content - view);
+    if (max_scroll <= 0) {
+        *scroll = 0;
+        return old != 0;
+    }
+    float thumb_h = fmaxf(24, track.h * view / content);
+    float ty = track.y + (track.h - thumb_h) * cg_clampf(*scroll / max_scroll, 0, 1);
+    ui_behavior b = ui_behave(w, id, track, false);
+    if (b.pressed) {
+        /* Grab the thumb where it was clicked, or centre it under the mouse. */
+        bool on_thumb = w->in.my >= ty && w->in.my < ty + thumb_h;
+        w->drag_anchor = on_thumb ? w->in.my - ty : thumb_h * 0.5f;
+    }
+    if (b.down && track.h > thumb_h)
+        *scroll = (w->in.my - w->drag_anchor - track.y) / (track.h - thumb_h) * max_scroll;
+    *scroll = cg_clampf(*scroll, 0, max_scroll);
+    ty = track.y + (track.h - thumb_h) * (*scroll / max_scroll);
+    const cg_theme *t = th(w);
+    float bw = fminf(track.w, 6);
+    cg_color c = b.hover || b.down ? cg_color_mix(t->scrollbar, t->text, 0.25f) : t->scrollbar;
+    cg_fill_rrect(w, cg_rect_make(track.x + track.w - bw, ty, bw, thumb_h), bw * 0.5f, c);
+    return *scroll != old;
 }
 
 bool cg_spinbox(cg_window *w, cg_id id, cg_rect r, float *value, float min, float max, float step,

@@ -422,6 +422,45 @@ void plat_window_set_min_size(plat_window *pw, int w, int h)
     [pw->win setContentMinSize:NSMakeSize(w / s, h / s)];
 }
 
+void plat_window_set_icon(plat_window *pw, const uint32_t *argb, int w, int h)
+{
+    (void)pw;
+    /* The dock icon; upscale with nearest-neighbour so pixel art stays sharp. */
+    const int size = 256;
+    uint8_t *rgba = (uint8_t *)calloc((size_t)size * size, 4);
+    int side = w > h ? w : h, ox = (side - w) / 2, oy = (side - h) / 2;
+    for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++) {
+            int sx = x * side / size - ox, sy = y * side / size - oy;
+            if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+            uint32_t p = argb[sy * w + sx];
+            uint8_t *d = rgba + ((size_t)y * size + x) * 4;
+            d[0] = (uint8_t)(p >> 16);
+            d[1] = (uint8_t)(p >> 8);
+            d[2] = (uint8_t)p;
+            d[3] = (uint8_t)(p >> 24);
+        }
+    @autoreleasepool {
+        CGContextRef ctx = CGBitmapContextCreate(rgba, size, size, 8, size * 4, g_colorspace,
+                                                 kCGImageAlphaPremultipliedLast);
+        /* Premultiply in place for the bitmap context. */
+        for (size_t i = 0; i < (size_t)size * size; i++) {
+            uint8_t *d = rgba + i * 4;
+            d[0] = (uint8_t)(d[0] * d[3] / 255);
+            d[1] = (uint8_t)(d[1] * d[3] / 255);
+            d[2] = (uint8_t)(d[2] * d[3] / 255);
+        }
+        CGImageRef img = ctx ? CGBitmapContextCreateImage(ctx) : NULL;
+        if (img) {
+            NSImage *ns = [[[NSImage alloc] initWithCGImage:img size:NSMakeSize(size, size)] autorelease];
+            [NSApp setApplicationIconImage:ns];
+            CGImageRelease(img);
+        }
+        if (ctx) CGContextRelease(ctx);
+    }
+    free(rgba);
+}
+
 void plat_window_size(plat_window *pw, int *w, int *h)
 {
     *w = pw->w;

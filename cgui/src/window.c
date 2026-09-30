@@ -66,6 +66,7 @@ void cg_window_destroy(cg_window *w)
     cg_font_free(w->ui_font);
     canvas_free(&w->cv);
     free(w->popup.matches);
+    free(w->icon);
     free(w->title);
     free(w);
 }
@@ -75,6 +76,21 @@ void cg_window_set_title(cg_window *w, const char *title)
     free(w->title);
     w->title = strdup(title ? title : "");
     plat_window_set_title(w->pw, w->title);
+    w->dirty = true;
+}
+
+void cg_window_set_icon(cg_window *w, const uint32_t *argb, int iw, int ih)
+{
+    free(w->icon);
+    w->icon = NULL;
+    w->icon_w = w->icon_h = 0;
+    if (argb && iw > 0 && ih > 0) {
+        w->icon = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)iw * ih);
+        memcpy(w->icon, argb, sizeof(uint32_t) * (size_t)iw * ih);
+        w->icon_w = iw;
+        w->icon_h = ih;
+        plat_window_set_icon(w->pw, argb, iw, ih);
+    }
     w->dirty = true;
 }
 
@@ -270,6 +286,15 @@ void chrome_draw(cg_window *w)
         float lh;
         cg_font_metrics(w, w->ui_font, fs, NULL, NULL, &lh);
         float x = 16.f + (w->maximized ? 0.f : st->corner_radius * 0.4f);
+        if (w->icon) {
+            /* Whole physical pixels per icon pixel keeps pixel art crisp. */
+            float target = g.T * 0.46f * s;
+            float k = fmaxf(1.f, floorf(target / (float)cg_maxi(w->icon_w, w->icon_h)));
+            float iw = w->icon_w * k / s, ih = w->icon_h * k / s;
+            float iy = floorf((g.T - ih) * 0.5f * s) / s;
+            cg_draw_image(w, cg_rect_make(floorf(x * s) / s, iy, iw, ih), w->icon, w->icon_w, w->icon_h);
+            x += iw + 10.f;
+        }
         cg_push_clip(w, cg_rect_make(0, 0, g.cx - g.arc_r - g.btn_r, g.T));
         cg_draw_text(w, w->ui_font, fs, x, (g.T - lh) * 0.5f, w->title, -1, th->title_text);
         cg_pop_clip(w);
