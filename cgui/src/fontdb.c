@@ -186,8 +186,21 @@ int cg_fontdb_scan(void)
     }
     g_nfaces = n;
 
-    /* Group into families. */
-    g_fams = (cg_font_family *)calloc((size_t)(g_nfaces ? g_nfaces : 1), sizeof *g_fams);
+    /* Discovery is finished. Compact before publishing pointers into the array. */
+    if (g_nfaces > 0 && g_nfaces < g_capfaces) {
+        cg_font_face *faces = (cg_font_face *)realloc(g_faces, (size_t)g_nfaces * sizeof *g_faces);
+        if (faces) {
+            g_faces = faces;
+            g_capfaces = g_nfaces;
+        }
+    }
+    int families = 0;
+    for (int i = 0; i < g_nfaces; i++)
+        if (i == 0 || ci_cmp(g_faces[i - 1].family, g_faces[i].family) != 0) families++;
+
+    /* Allocate one record per family, rather than one per face/style. */
+    g_fams = (cg_font_family *)calloc((size_t)(families ? families : 1), sizeof *g_fams);
+    if (!g_fams) return 0;
     for (int i = 0; i < g_nfaces;) {
         int j = i;
         while (j < g_nfaces && ci_cmp(g_faces[j].family, g_faces[i].family) == 0) j++;

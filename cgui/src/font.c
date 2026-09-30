@@ -17,6 +17,7 @@ typedef struct glyph {
     int32_t size26;     /* 0 = empty slot */
     int16_t w, h, left, top;
     int32_t adv26;
+    bool rendered;     /* measurements need only the advance, not a bitmap */
     uint8_t *bmp;
 } glyph;
 
@@ -198,19 +199,43 @@ static void cache_grow(cg_font *f)
     free(old);
 }
 
-static const glyph *get_glyph(cg_font *f, uint32_t gi, int32_t size26)
+static void render_glyph(cg_font *f, glyph *g, bool loaded)
 {
+    set_size(f, g->size26);
+    if ((!loaded && FT_Load_Glyph(f->face, g->gi, FT_LOAD_TARGET_LIGHT | FT_LOAD_NO_BITMAP) != 0) ||
+        FT_Render_Glyph(f->face->glyph, FT_RENDER_MODE_LIGHT) != 0) return;
+    FT_GlyphSlot slot = f->face->glyph;
+    FT_Bitmap *bm = &slot->bitmap;
+    g->left = (int16_t)slot->bitmap_left;
+    g->top = (int16_t)slot->bitmap_top;
+    if (bm->width > 0 && bm->rows > 0 && bm->pixel_mode == FT_PIXEL_MODE_GRAY) {
+        if (bm->width > INT16_MAX || bm->rows > INT16_MAX) return;
+        size_t bytes = (size_t)bm->width * bm->rows;
+        g->bmp = (uint8_t *)malloc(bytes);
+        if (!g->bmp) return;
+        g->w = (int16_t)bm->width;
+        g->h = (int16_t)bm->rows;
+        for (int y = 0; y < g->h; y++)
+            memcpy(g->bmp + (size_t)y * g->w, bm->buffer + (ptrdiff_t)y * bm->pitch, (size_t)g->w);
+        f->bytes += bytes;
+    }
+    g->rendered = true;
+}
+
+static const glyph *get_glyph(cg_font *f, uint32_t gi, int32_t size26, bool draw)
+{
+    /* Bound metadata as well as bitmap storage, including measure-only runs. */
+    if (f->bytes > (16u << 20) || f->count >= 65536) cache_clear(f);
     uint32_t mask = (uint32_t)f->cap - 1;
     uint32_t h = hash2(gi, size26) & mask;
     while (f->tab[h].size26) {
-        if (f->tab[h].gi == gi && f->tab[h].size26 == size26) return &f->tab[h];
+        if (f->tab[h].gi == gi && f->tab[h].size26 == size26) {
+            if (draw && !f->tab[h].rendered) render_glyph(f, &f->tab[h], false);
+            return &f->tab[h];
+        }
         h = (h + 1) & mask;
     }
-    /* Not cached: render it. Keep memory bounded by flushing everything. */
-    if (f->bytes > (16u << 20)) {
-        cache_clear(f);
-        h = hash2(gi, size26) & mask;
-    }
+    /* Cache metrics now; rasterize only when a caller draws the glyph. */
     if ((f->count + 1) * 10 > f->cap * 7) {
         cache_grow(f);
         mask = (uint32_t)f->cap - 1;
@@ -223,21 +248,9 @@ static const glyph *get_glyph(cg_font *f, uint32_t gi, int32_t size26)
     g.size26 = size26;
     set_size(f, size26);
     FT_Face face = f->face;
-    if (FT_Load_Glyph(face, gi, FT_LOAD_TARGET_LIGHT | FT_LOAD_NO_BITMAP) == 0 &&
-        FT_Render_Glyph(face->glyph, FT_RENDER_MODE_LIGHT) == 0) {
-        FT_GlyphSlot slot = face->glyph;
-        FT_Bitmap *bm = &slot->bitmap;
-        g.adv26 = (int32_t)slot->advance.x;
-        g.left = (int16_t)slot->bitmap_left;
-        g.top = (int16_t)slot->bitmap_top;
-        if (bm->width > 0 && bm->rows > 0 && bm->pixel_mode == FT_PIXEL_MODE_GRAY) {
-            g.w = (int16_t)bm->width;
-            g.h = (int16_t)bm->rows;
-            g.bmp = (uint8_t *)malloc((size_t)g.w * g.h);
-            for (int y = 0; y < g.h; y++)
-                memcpy(g.bmp + (size_t)y * g.w, bm->buffer + (ptrdiff_t)y * bm->pitch, (size_t)g.w);
-            f->bytes += (size_t)g.w * g.h;
-        }
+    if (FT_Load_Glyph(face, gi, FT_LOAD_TARGET_LIGHT | FT_LOAD_NO_BITMAP) == 0) {
+        g.adv26 = (int32_t)face->glyph->advance.x;
+        if (draw) render_glyph(f, &g, true);
     }
     f->tab[h] = g;
     f->count++;
@@ -267,7 +280,7 @@ static int32_t run_glyph(font_run *run, uint32_t cp, const glyph **out)
         if (FT_Get_Kerning(f->face, run->prev_gi, gi, FT_KERNING_DEFAULT, &k) == 0)
             run->pen26 += (int32_t)k.x;
     }
-    const glyph *g = get_glyph(f, gi, run->size26);
+    const glyph *g = get_glyph(f, gi, run->size26, out != NULL);
     int32_t origin = run->pen26;
     run->pen26 += g->adv26;
     run->prev_gi = gi;
